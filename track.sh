@@ -30,6 +30,15 @@ source .env
 PORT=${PORT:-${PORT:-5000}}
 MESSAGE_PREFIX=${MESSAGE_PREFIX:-"Hi! Please tap this secure link to share your location: "}
 
+# Ensure pyngrok downloads binary to a writable project-local folder
+export PYNGROK_DOWNLOAD_PATH="$(pwd)/.ngrok-bin"
+mkdir -p "$PYNGROK_DOWNLOAD_PATH" >/dev/null 2>&1 || true
+
+# If running as root (e.g., via sudo), allow ngrok to run
+if [ "$(id -u)" = "0" ]; then
+  export NGROK_ALLOW_ROOT=true
+fi
+
 # Preconditions
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 need python
