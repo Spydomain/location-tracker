@@ -72,6 +72,93 @@ bash track.sh
 ```
 - Similar behavior to PowerShell script: auto-creates `.venv`, installs deps, runs server + ngrok, prompts for phone + consent, and optionally sends Twilio SMS.
 
+## Detailed Setup (Recommended)
+
+Follow these steps for a reliable first run.
+
+1) Create `.env` (do not only edit `.env.example`)
+
+- Copy once, then edit:
+  ```bash
+  cp .env.example .env
+  ```
+- Open `.env` and set at least one of:
+  - `BASE_URL=https://your-hosted-url` (skip ngrok), or
+  - `NGROK_AUTHTOKEN=<your_verified_ngrok_token>` to use ngrok.
+- Optional SMS:
+  - `TWILIO_SID=AC...`
+  - `TWILIO_TOKEN=...`
+  - `TWILIO_FROM=+1XXXXXXXXXX` (SMS-capable number)
+  - `TARGET_NUMBER=+<countrycode><number>` (default recipient)
+
+2) Install dependencies
+
+- Windows (PowerShell):
+  ```powershell
+  py -m venv .venv
+  .venv\Scripts\Activate.ps1
+  pip install -r requirements.txt
+  ```
+- Bash (Git Bash/WSL/macOS/Linux):
+  ```bash
+  python -m venv .venv
+  source .venv/Scripts/activate  # Windows Git Bash
+  # or source .venv/bin/activate  # Linux/macOS
+  pip install -r requirements.txt
+  ```
+
+3) ngrok (if not using BASE_URL)
+
+- Install ngrok and add your token (same user you will run the script as):
+  ```bash
+  ngrok config add-authtoken <YOUR_NGROK_TOKEN>
+  ```
+- Alternatively, keep `NGROK_AUTHTOKEN` in `.env` and the scripts will configure it.
+
+4) Run
+
+- Windows: `./track.ps1`
+- Bash: `bash track.sh` (avoid `sudo` unless necessary)
+
+5) Share the printed "Capture" link with the consenting user
+
+- They must open the HTTPS link and allow location. View live updates at `/latest`.
+
+## Enable SMS Sending (Twilio)
+
+To auto-send the capture link via SMS:
+
+- In `.env`, set:
+  ```
+  TWILIO_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  TWILIO_TOKEN=your_auth_token_here
+  TWILIO_FROM=+1XXXXXXXXXX
+  ```
+- Trial account notes:
+  - You can only message verified recipient numbers.
+  - Enable target country under Messaging Geo Permissions.
+- The script uses the number you input at runtime or `TARGET_NUMBER` in `.env` and sends the capture link (`/`) with `?from=<phone>` added.
+
+## ngrok Troubleshooting
+
+- `ERR_NGROK_4018` (auth required):
+  - Use a verified ngrok account and token.
+  - Put the token in `.env` as `NGROK_AUTHTOKEN=...` or run `ngrok config add-authtoken ...`.
+- `ERR_NGROK_108` (one agent session):
+  - Stop existing sessions (Dashboard: Agents) or kill local processes:
+    - Linux/WSL: `pkill -f ngrok || true`
+    - Windows: `taskkill /IM ngrok.exe /F`
+  - Also clear pyngrok tunnels: `python -c "from pyngrok import ngrok; ngrok.kill()"`
+- Using `sudo` can use a different ngrok config profile. Prefer running without `sudo`.
+- If ngrok CLI fails, the script falls back to `pyngrok` and prints logs from `./.tmp/ngrok.log`.
+
+## Notes
+
+- Files:
+  - `server.py`, `track.sh`, `track.ps1`, `templates/index.html`, `.env`, `.env.example`.
+- Data:
+  - Logs appended to `data/locations.json` (JSONL). Consider rotating or purging periodically.
+
 ## Manual run (without Bash)
 - In one terminal:
   ```bash
