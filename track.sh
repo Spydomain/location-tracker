@@ -138,19 +138,32 @@ else
     # Use pyngrok to create a tunnel and print the URL
     PUBLIC_URL=$("$PY" - <<'PY'
 import os
+import pathlib
 from pyngrok import ngrok
+from pyngrok.conf import PyngrokConfig
+
 port = int(os.environ.get('PORT','5000'))
-# set authtoken if provided
 token = os.environ.get('NGROK_AUTHTOKEN')
+
+# Ensure local, writable ngrok path
+bin_dir = os.environ.get('PYNGROK_DOWNLOAD_PATH') or os.path.join(os.getcwd(), '.ngrok-bin')
+pathlib.Path(bin_dir).mkdir(parents=True, exist_ok=True)
+ngrok_path = os.path.join(bin_dir, 'ngrok')
+
+# Allow root if needed
+os.environ.setdefault('NGROK_ALLOW_ROOT', 'true' if os.geteuid()==0 else 'false')
+
+cfg = PyngrokConfig(ngrok_path=ngrok_path, auth_token=token)
 if token:
     try:
-        ngrok.set_auth_token(token)
+        ngrok.set_auth_token(token, pyngrok_config=cfg)
     except Exception:
         pass
-t = ngrok.connect(addr=port, proto='http')
+
+t = ngrok.connect(addr=port, proto='http', pyngrok_config=cfg)
 print(t.public_url)
 PY
-)
+    )
     if [ -z "$PUBLIC_URL" ]; then
       echo "Failed to obtain public URL via pyngrok" >&2
       exit 1
