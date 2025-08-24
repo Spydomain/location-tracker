@@ -75,6 +75,27 @@ if ($envVars.ContainsKey('NGROK_AUTHTOKEN') -and -not [string]::IsNullOrWhiteSpa
   $env:NGROK_AUTHTOKEN = $envVars['NGROK_AUTHTOKEN']
 }
 
+# If no BASE_URL and no NGROK_AUTHTOKEN and ngrok CLI missing, ask user for one and persist to .env
+$hasBase = ($envVars.ContainsKey('BASE_URL') -and -not [string]::IsNullOrWhiteSpace($envVars['BASE_URL']))
+$hasToken = ($envVars.ContainsKey('NGROK_AUTHTOKEN') -and -not [string]::IsNullOrWhiteSpace($envVars['NGROK_AUTHTOKEN']))
+$ngrokCli = Get-Command ngrok -ErrorAction SilentlyContinue
+if (-not $hasBase -and -not $hasToken -and -not $ngrokCli) {
+  Write-Host 'No BASE_URL set and ngrok CLI not found.'
+  Write-Host 'Provide either a hosted BASE_URL (recommended) or an ngrok authtoken.'
+  $inputBase = Read-Host 'Enter BASE_URL (leave empty to use ngrok)'
+  if (-not [string]::IsNullOrWhiteSpace($inputBase)) {
+    $envVars['BASE_URL'] = $inputBase
+  } else {
+    $inputToken = Read-Host 'Enter NGROK_AUTHTOKEN (leave empty to skip)'
+    if (-not [string]::IsNullOrWhiteSpace($inputToken)) {
+      $envVars['NGROK_AUTHTOKEN'] = $inputToken
+      $env:NGROK_AUTHTOKEN = $inputToken
+    }
+  }
+  # Persist updates to .env
+  Save-EnvFile $envPath $envVars
+}
+
 # 4) Start Flask server
 Write-Host "Starting Flask server on port $PORT..."
 $server = Start-Process -FilePath $venvPy -ArgumentList @((Join-Path $PSScriptRoot 'server.py')) -NoNewWindow -PassThru -WorkingDirectory $PSScriptRoot -Env @{"PORT"=$PORT}

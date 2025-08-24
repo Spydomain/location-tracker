@@ -35,6 +35,32 @@ need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2;
 need python
 need curl
 
+# If no BASE_URL and no NGROK_AUTHTOKEN and ngrok CLI missing, ask user for one
+if [ -z "${BASE_URL:-}" ] && [ -z "${NGROK_AUTHTOKEN:-}" ] && ! command -v ngrok >/dev/null 2>&1; then
+  echo "No BASE_URL set and ngrok CLI not found."
+  echo "Provide either a hosted BASE_URL (recommended) or an ngrok authtoken."
+  read -r -p "Enter BASE_URL (leave empty to use ngrok): " INPUT_BASE
+  if [ -n "$INPUT_BASE" ]; then
+    BASE_URL="$INPUT_BASE"
+    # Persist to .env
+    if grep -q '^BASE_URL=' .env; then
+      sed -i.bak "s|^BASE_URL=.*|BASE_URL=$BASE_URL|" .env || true
+    else
+      printf '\nBASE_URL=%s\n' "$BASE_URL" >> .env
+    fi
+  else
+    read -r -p "Enter NGROK_AUTHTOKEN (leave empty to skip): " INPUT_TOKEN
+    if [ -n "$INPUT_TOKEN" ]; then
+      NGROK_AUTHTOKEN="$INPUT_TOKEN"
+      if grep -q '^NGROK_AUTHTOKEN=' .env; then
+        sed -i.bak "s|^NGROK_AUTHTOKEN=.*|NGROK_AUTHTOKEN=$NGROK_AUTHTOKEN|" .env || true
+      else
+        printf '\nNGROK_AUTHTOKEN=%s\n' "$NGROK_AUTHTOKEN" >> .env
+      fi
+    fi
+  fi
+fi
+
 # Create and use virtualenv for dependencies
 if [ ! -d .venv ]; then
   echo "Creating virtual environment (.venv)..."
