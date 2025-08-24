@@ -39,6 +39,10 @@ if [ "$(id -u)" = "0" ]; then
   export NGROK_ALLOW_ROOT=true
 fi
 
+# Force a local temporary directory so pyngrok doesn't use /tmp
+export TMPDIR="$(pwd)/.tmp"
+mkdir -p "$TMPDIR" >/dev/null 2>&1 || true
+
 # Preconditions
 need() { command -v "$1" >/dev/null 2>&1 || { echo "Missing dependency: $1" >&2; exit 1; }; }
 need python
@@ -136,6 +140,22 @@ else
   else
     echo "ngrok CLI not found. Using pyngrok fallback..."
     # Use pyngrok to create a tunnel and print the URL
+    # Ensure ngrok binary exists locally to avoid pyngrok downloading into /tmp
+    if [ ! -x "$PYNGROK_DOWNLOAD_PATH/ngrok" ]; then
+      echo "Preparing local ngrok binary..."
+      NGrokURL="https://bin.equinox.io/c/bNyj1mQVY4c/ngrok-v3-stable-linux-amd64.zip"
+      DL_ZIP="$TMPDIR/ngrok.zip"
+      rm -f "$DL_ZIP" 2>/dev/null || true
+      curl -fsSL -o "$DL_ZIP" "$NGrokURL" || { echo "Failed to download ngrok" >&2; exit 1; }
+      "$PY" - <<PY || { echo "Failed to extract ngrok" >&2; exit 1; }
+import os, zipfile
+zip_path = os.environ['TMPDIR'] + '/ngrok.zip'
+out_dir = os.environ['PYNGROK_DOWNLOAD_PATH']
+with zipfile.ZipFile(zip_path, 'r') as z:
+    z.extractall(out_dir)
+PY
+      chmod +x "$PYNGROK_DOWNLOAD_PATH/ngrok" || true
+    fi
     PUBLIC_URL=$("$PY" - <<'PY'
 import os
 import pathlib
@@ -152,6 +172,11 @@ ngrok_path = os.path.join(bin_dir, 'ngrok')
 
 # Allow root if needed
 os.environ.setdefault('NGROK_ALLOW_ROOT', 'true' if os.geteuid()==0 else 'false')
+
+# Ensure a local tmp directory (avoid /tmp perms under sudo)
+tmp_dir = os.environ.get('TMPDIR') or os.path.join(os.getcwd(), '.tmp')
+pathlib.Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+os.environ.setdefault('TMPDIR', tmp_dir)
 
 cfg = PyngrokConfig(ngrok_path=ngrok_path, auth_token=token)
 if token:
