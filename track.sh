@@ -154,7 +154,41 @@ else
     if [ -z "$PUBLIC_URL" ]; then
       echo "Failed to obtain ngrok public URL. Recent logs:" >&2
       tail -n 80 "$NGROK_LOG" 2>/dev/null >&2 || true
-      exit 1
+      echo "Falling back to pyngrok..." >&2
+      # Attempt pyngrok fallback inline
+      PUBLIC_URL=$("$PY" - <<'PY'
+import os, pathlib, zipfile, sys
+from pyngrok import ngrok
+from pyngrok.conf import PyngrokConfig
+
+port = int(os.environ.get('PORT','5000'))
+token = os.environ.get('NGROK_AUTHTOKEN')
+bin_dir = os.environ.get('PYNGROK_DOWNLOAD_PATH') or os.path.join(os.getcwd(), '.ngrok-bin')
+pathlib.Path(bin_dir).mkdir(parents=True, exist_ok=True)
+ngrok_path = os.path.join(bin_dir, 'ngrok')
+
+# Ensure a local tmp directory
+tmp_dir = os.environ.get('TMPDIR') or os.path.join(os.getcwd(), '.tmp')
+pathlib.Path(tmp_dir).mkdir(parents=True, exist_ok=True)
+os.environ.setdefault('TMPDIR', tmp_dir)
+
+cfg = PyngrokConfig(ngrok_path=ngrok_path, auth_token=token)
+if token:
+    try:
+        ngrok.set_auth_token(token, pyngrok_config=cfg)
+    except Exception:
+        pass
+try:
+    t = ngrok.connect(addr=port, proto='http', pyngrok_config=cfg)
+    print(t.public_url)
+except Exception as e:
+    sys.exit(1)
+PY
+      )
+      if [ -z "$PUBLIC_URL" ]; then
+        echo "pyngrok fallback also failed." >&2
+        exit 1
+      fi
     fi
   else
     echo "ngrok CLI not found. Using pyngrok fallback..."
