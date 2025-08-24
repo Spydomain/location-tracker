@@ -70,6 +70,10 @@ if (-not (Test-Path $envPath)) {
 $envVars = Load-EnvFile $envPath
 $PORT = [int]($envVars['PORT'])
 $MESSAGE_PREFIX = if ($envVars.ContainsKey('MESSAGE_PREFIX')) { $envVars['MESSAGE_PREFIX'] } else { 'Hi! Please tap this secure link to share your location: ' }
+# Export NGROK_AUTHTOKEN to environment if present
+if ($envVars.ContainsKey('NGROK_AUTHTOKEN') -and -not [string]::IsNullOrWhiteSpace($envVars['NGROK_AUTHTOKEN'])) {
+  $env:NGROK_AUTHTOKEN = $envVars['NGROK_AUTHTOKEN']
+}
 
 # 4) Start Flask server
 Write-Host "Starting Flask server on port $PORT..."
@@ -112,10 +116,19 @@ if ($envVars.ContainsKey('BASE_URL') -and -not [string]::IsNullOrWhiteSpace($env
     if (-not $publicUrl) { throw 'ngrok did not provide a public URL.' }
   } else {
     Write-Host 'ngrok CLI not found. Using pyngrok fallback...'
+    # Ensure token is available to the child process
+    if ($envVars.ContainsKey('NGROK_AUTHTOKEN') -and -not [string]::IsNullOrWhiteSpace($envVars['NGROK_AUTHTOKEN'])) { $env:NGROK_AUTHTOKEN = $envVars['NGROK_AUTHTOKEN'] }
     $publicUrl = & $venvPy - << 'PY'
 import os
 from pyngrok import ngrok
 port = int(os.environ.get('PORT','5000'))
+# set authtoken if provided
+token = os.environ.get('NGROK_AUTHTOKEN')
+if token:
+    try:
+        ngrok.set_auth_token(token)
+    except Exception:
+        pass
 tunnel = ngrok.connect(addr=port, proto='http')
 print(tunnel.public_url)
 PY

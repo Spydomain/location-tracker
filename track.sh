@@ -12,6 +12,7 @@ PORT=5000
 AUTO_OPEN_LATEST=false
 MESSAGE_PREFIX="Hi! Please tap this secure link to share your location: "
 # BASE_URL= https://your-app.example.com
+# NGROK_AUTHTOKEN= # paste your ngrok authtoken to avoid auth errors
 # TWILIO_SID=AC...
 # TWILIO_TOKEN=...
 # TWILIO_FROM=+1...
@@ -104,6 +105,13 @@ else
 import os
 from pyngrok import ngrok
 port = int(os.environ.get('PORT','5000'))
+# set authtoken if provided
+token = os.environ.get('NGROK_AUTHTOKEN')
+if token:
+    try:
+        ngrok.set_auth_token(token)
+    except Exception:
+        pass
 t = ngrok.connect(addr=port, proto='http')
 print(t.public_url)
 PY
