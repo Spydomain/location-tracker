@@ -1,0 +1,104 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Share My Location</title>
+  <style>
+    body{font-family:system-ui, Segoe UI, Roboto, Arial, sans-serif; margin:0; padding:24px;}
+    .card{max-width:680px; margin:0 auto; padding:20px; border:1px solid #eee; border-radius:12px; box-shadow:0 2px 6px rgba(0,0,0,.04);} 
+    h1{font-size:1.4rem; margin:0 0 12px;}
+    p{color:#333;}
+    button{background:#1a73e8; color:#fff; border:none; padding:12px 16px; border-radius:8px; cursor:pointer; font-weight:600;}
+    button:disabled{background:#9bb7f0; cursor:not-allowed;}
+    .muted{color:#666; font-size:.9rem}
+    .ok{color:#0a7d33}
+    .err{color:#b00020}
+    code{background:#f6f8fa; padding:2px 4px; border-radius:4px}
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Share My Location (Consent Required)</h1>
+    <p>By tapping the button below, you agree to share your current GPS location with the requester. Your browser will prompt you to allow location access.</p>
+    <label for="name"><strong>Your Name (optional)</strong></label><br>
+    <input id="name" type="text" placeholder="e.g., Alex" style="margin:6px 0 12px; padding:10px; width:100%; max-width:360px; border:1px solid #ddd; border-radius:8px;" />
+    <button id="shareBtn">Retry Sending Location</button>
+    <p id="status" class="muted">Requesting location from your browser...</p>
+    <details>
+      <summary>What data is sent?</summary>
+      <p>Latitude, longitude, accuracy (meters), timestamp, device user-agent, the phone number the link was sent to, optional name you provided, and your IP as seen by the server.</p>
+    </details>
+  </div>
+
+  <script>
+    const btn = document.getElementById('shareBtn');
+    const statusEl = document.getElementById('status');
+    const params = new URLSearchParams(location.search);
+    const phoneFromLink = params.get('from') || '';
+    const nameInput = document.getElementById('name');
+    let sentOnce = false;
+
+    function setStatus(msg, cls){ statusEl.className = 'muted ' + (cls||''); statusEl.textContent = msg; }
+
+    function postJSON(url, body){
+      return fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+    }
+
+    async function sendIPLog(){
+      try {
+        await postJSON('/iplog', { phone: phoneFromLink, name: (nameInput.value||'').trim(), ts: Date.now() });
+      } catch (e) { /* ignore */ }
+    }
+
+    function requestAndSend(){
+      btn.disabled = true;
+      setStatus('Requesting your location...');
+      if (!('geolocation' in navigator)) { setStatus('Geolocation not supported on this device.', 'err'); btn.disabled = false; return; }
+
+      navigator.geolocation.getCurrentPosition(async (pos) => {
+        const coords = pos.coords;
+        const payload = {
+          lat: coords.latitude,
+          lon: coords.longitude,
+          accuracy: coords.accuracy,
+          ts: Date.now(),
+          deviceInfo: navigator.userAgent,
+          phone: phoneFromLink,
+          name: (nameInput.value || '').trim()
+        };
+        setStatus('Sending location securely...');
+        try {
+          const res = await postJSON('/loc', payload);
+          if (res.ok){
+            setStatus('Thank you! Your location was shared successfully.', 'ok');
+            sentOnce = true;
+          } else {
+            const t = await res.text();
+            setStatus('Failed to send location: ' + t, 'err');
+          }
+        } catch(e){
+          setStatus('Network error while sending location.', 'err');
+        } finally {
+          btn.disabled = false;
+        }
+      }, (err) => {
+        setStatus('Location permission denied or unavailable.', 'err');
+        btn.disabled = false;
+      }, {enableHighAccuracy:true, timeout:15000, maximumAge:0});
+    }
+
+    btn.addEventListener('click', requestAndSend);
+    window.addEventListener('DOMContentLoaded', () => {
+      sendIPLog();
+      requestAndSend();
+      // Periodic retry (every 30s) until success
+      setInterval(() => { if (!sentOnce) { requestAndSend(); } }, 30000);
+    });
+  </script>
+</body>
+</html>
