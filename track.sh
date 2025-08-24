@@ -119,22 +119,41 @@ if [ -n "${BASE_URL:-}" ]; then
 else
   # Start tunnel: prefer ngrok CLI, otherwise pyngrok
   if command -v ngrok >/dev/null 2>&1; then
+    # If an authtoken is provided in the environment or .env, configure ngrok for this user (incl. sudo/root)
+    if [ -n "${NGROK_AUTHTOKEN:-}" ]; then
+      echo "Configuring ngrok authtoken for CLI..."
+      ngrok config add-authtoken "$NGROK_AUTHTOKEN" >/dev/null 2>&1 || true
+    fi
+
     echo "Starting ngrok tunnel (CLI)..."
-    ngrok http ${PORT} >/dev/null 2>&1 &
+    NGROK_LOG="$TMPDIR/ngrok.log"
+    : > "$NGROK_LOG" || true
+    ngrok http ${PORT} >"$NGROK_LOG" 2>&1 &
     NGROK_PID=$!
     echo -n "Waiting for ngrok public URL"
     for i in {1..30}; do
+      # If ngrok process already exited, show logs and fail fast
+      if ! kill -0 "$NGROK_PID" >/dev/null 2>&1; then
+        echo "\nngrok exited early. Recent logs:" >&2
+        tail -n 80 "$NGROK_LOG" 2>/dev/null >&2 || true
+        exit 1
+      fi
       if curl -sS http://127.0.0.1:4040/api/tunnels >/dev/null 2>&1; then
         break
       fi
       echo -n "."
       sleep 1
-      if [ "$i" -eq 30 ]; then echo "\nngrok did not start." >&2; exit 1; fi
+      if [ "$i" -eq 30 ]; then 
+        echo "\nngrok did not start. Recent logs:" >&2
+        tail -n 80 "$NGROK_LOG" 2>/dev/null >&2 || true
+        exit 1
+      fi
     done
     TUNNELS_JSON=$(curl -sS http://127.0.0.1:4040/api/tunnels)
-    PUBLIC_URL=$(printf '%s' "$TUNNELS_JSON" | sed -n 's/.*"public_url":"\(https:\/\/[^\"]*\)".*/\1/p' | head -n1)
+    PUBLIC_URL=$(printf '%s' "$TUNNELS_JSON" | sed -n 's/.*"public_url":"\(https:\/\/[^"]*\)".*/\1/p' | head -n1)
     if [ -z "$PUBLIC_URL" ]; then
-      echo "Failed to obtain ngrok public URL" >&2
+      echo "Failed to obtain ngrok public URL. Recent logs:" >&2
+      tail -n 80 "$NGROK_LOG" 2>/dev/null >&2 || true
       exit 1
     fi
   else
